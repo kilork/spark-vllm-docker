@@ -149,6 +149,16 @@ Don't do it every time you rebuild, because it will slow down compilation times.
 
 For periodic maintenance, I recommend using a filter: `docker builder prune --filter until=72h`
 
+### 2026-03-12
+
+#### Nemotron-3-Super-120B NVFP4 Recipe
+
+Added a new recipe `nemotron-3-super-nvfp4` for running `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` with Marlin kernels. Supports both solo and cluster modes. Includes a custom reasoning parser (`super_v3_reasoning_parser.py`) fetched from the model repository. Supports both dual and single Spark configurations.
+
+```bash
+./run-recipe.sh nemotron-3-super-nvfp4
+```
+
 ### 2026-03-11
 
 #### Qwen3-Coder-Next INT4-AutoRound Recipe
