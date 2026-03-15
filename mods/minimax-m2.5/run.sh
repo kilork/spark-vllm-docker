@@ -10,6 +10,6 @@ TOKENIZER=/minimax-m2.5-tokenizer
 
 mkdir $TOKENIZER
 cd $TOKENIZER
-cp $MODEL_PATH/{chat_template.jinja,tokenizer.json,tokenizer_config.json}
+cp $MODEL_PATH/{chat_template.jinja,tokenizer.json,tokenizer_config.json} .
 sed -i 's/"tokenizer_class": *"[^"]*"/"tokenizer_class": "TokenizersBackend"/' tokenizer_config.json
 tail -n5 tokenizer_config.json
