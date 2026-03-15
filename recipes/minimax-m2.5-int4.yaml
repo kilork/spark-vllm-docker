@@ -44,8 +44,10 @@ command: |
       --gpu-memory-utilization {gpu_memory_utilization} \
       -tp {tensor_parallel} \
       --distributed-executor-backend ray \
+      --served-model-name minimax-m2.5 \
       --max-model-len {max_model_len} \
       --load-format fastsafetensors \
+      --kv-cache-dtype fp8  \
       --enable-auto-tool-choice \
       --interleave-mm-strings \
       --tokenizer /minimax-m2.5-tokenizer \
