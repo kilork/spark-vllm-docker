@@ -17,6 +17,7 @@ PARALLEL_COPY=false
 EXP_MXFP4=false
 VLLM_REF_SET=false
 VLLM_PRS=""
+FLASHINFER_PRS=""
 PRE_TRANSFORMERS=false
 FULL_LOG=false
 BUILD_JOBS="16"
@@ -242,6 +243,7 @@ usage() {
     echo "  --tf5                         : Install transformers>=5 (aliases: --pre-tf, --pre-transformers)"
     echo "  --exp-mxfp4, --experimental-mxfp4 : Build with experimental native MXFP4 support"
     echo "  --apply-vllm-pr <pr-num>      : Apply a specific PR patch to vLLM source. Can be specified multiple times."
+    echo "  --apply-flashinfer-pr <pr-num> : Apply a specific PR patch to FlashInfer source. Can be specified multiple times."
     echo "  --full-log                    : Enable full build logging (--progress=plain)"
     echo "  --no-build                    : Skip building, only copy image (requires --copy-to)"
     echo "  -h, --help                    : Show this help message"
@@ -303,6 +305,19 @@ while [[ "$#" -gt 0 ]]; do
                exit 1
             fi
             ;;
+        --apply-flashinfer-pr)
+            if [ -n "$2" ] && [[ "$2" != -* ]]; then
+               if [ -n "$FLASHINFER_PRS" ]; then
+                   FLASHINFER_PRS="$FLASHINFER_PRS $2"
+               else
+                   FLASHINFER_PRS="$2"
+               fi
+               shift
+            else
+               echo "Error: --apply-flashinfer-pr requires a PR number."
+               exit 1
+            fi
+            ;;
         --full-log) FULL_LOG=true ;;
         --no-build) NO_BUILD=true ;;
         -h|--help) usage ;;
@@ -314,6 +329,11 @@ done
 # Validate flag combinations
 if [ -n "$VLLM_PRS" ]; then
     if [ "$EXP_MXFP4" = true ]; then echo "Error: --apply-vllm-pr is incompatible with --exp-mxfp4"; exit 1; fi
+fi
+
+if [ -n "$FLASHINFER_PRS" ]; then
+    if [ "$EXP_MXFP4" = true ]; then echo "Error: --apply-flashinfer-pr is incompatible with --exp-mxfp4"; exit 1; fi
+    REBUILD_FLASHINFER=true
 fi
 
 if [ "$EXP_MXFP4" = true ]; then
@@ -363,8 +383,12 @@ if [ "$NO_BUILD" = false ]; then
         # ----------------------------------------------------------
         BUILD_FLASHINFER=false
         if [ "$REBUILD_FLASHINFER" = true ]; then
-            echo "Rebuilding FlashInfer wheels (--rebuild-flashinfer specified)..."
-            BUILD_FLASHINFER=true
+            if compgen -G "./wheels/flashinfer*.whl" > /dev/null 2>&1; then
+                echo "FlashInfer wheels already exist — skipping rebuild."
+            else
+                echo "Building FlashInfer wheels (--rebuild-flashinfer specified, no existing wheels found)..."
+                BUILD_FLASHINFER=true
+            fi
         elif try_download_wheels "$FLASHINFER_RELEASE_TAG" "flashinfer"; then
             echo "FlashInfer wheels ready."
         elif compgen -G "./wheels/flashinfer*.whl" > /dev/null 2>&1; then
@@ -389,6 +413,11 @@ if [ "$NO_BUILD" = false ]; then
 
             if [ "$REBUILD_FLASHINFER" = true ]; then
                 FI_CMD+=("--build-arg" "CACHEBUST_FLASHINFER=$(date +%s)")
+            fi
+
+            if [ -n "$FLASHINFER_PRS" ]; then
+                echo "Applying FlashInfer PRs: $FLASHINFER_PRS"
+                FI_CMD+=("--build-arg" "FLASHINFER_PRS=$FLASHINFER_PRS")
             fi
 
             FI_CMD+=(".")
