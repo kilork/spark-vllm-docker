@@ -119,14 +119,7 @@ RUN if [ -n "$FLASHINFER_PRS" ]; then \
 # Reference: https://github.com/NVIDIA/cutlass/issues/3096
 #            https://github.com/brandonmmusic-max/sm120-moe-bench/tree/master/patches
 COPY flashinfer_k64_sm120.patch .
-RUN if [ -f flashinfer_k64_sm120.patch ]; then \
-        if patch -p1 --dry-run --reverse < flashinfer_k64_sm120.patch &>/dev/null; then \
-            echo "K=64 SM120 patch already applied"; \
-        else \
-            echo "Applying K=64 SM120 CUTLASS patch..." && \
-            patch -p1 < flashinfer_k64_sm120.patch; \
-        fi; \
-    fi
+RUN patch -p1 < flashinfer_k64_sm120.patch
 
 # Apply patch to avoid re-downloading existing cubins
 COPY flashinfer_cache.patch .
