@@ -20,7 +20,6 @@ cluster_only: true
 # No mods required
 mods:
   - mods/fix-qwen3.5-autoround
-  - mods/fix-qwen3.5-chat-template
   - mods/minimax-m2.5
 
 # Default settings (can be overridden via CLI)
