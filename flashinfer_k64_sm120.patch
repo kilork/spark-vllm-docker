@@ -1,15 +1,15 @@
 --- a/3rdparty/cutlass/include/cutlass/gemm/collective/builders/sm120_blockscaled_mma_builder.inl
 +++ b/3rdparty/cutlass/include/cutlass/gemm/collective/builders/sm120_blockscaled_mma_builder.inl
-@@ -177,31 +177,53 @@
+@@ -177,31 +177,53 @@ struct CollectiveBuilder<
    using SmemCopyAtomsB = decltype(cute::make_tuple(SmemCopyAtomB{}, SmemCopyAtomSFB{}));
-
+ 
    // Construct SMEM layout for SF
 -  // A single indivisible block will hold 4 scale factors of 128 rows/columns (A/B matrix).
--  // 4 is chosen to make consecutive 32bits of data to have scale factors for only a single row (col). 32bits corresponds to the TMEM word size
+-  // 4 is chosen to make consecutive 32bits of data to have scale factors for only a single row (col). 32bits corresponds to the TMEM word size 
 +  // A single indivisible block will hold Blk_SF (4) scale factors of 128 rows/columns (A/B matrix).
 +  // 4 is chosen to make consecutive 32bits of data to have scale factors for only a single row (col). 32bits corresponds to the TMEM word size
    using Blk_MN    = typename Sm1xxBlkScaledConfig::Blk_MN;
--  using Blk_SF    = typename Sm1xxBlkScaledConfig::Blk_SF;
+-  using Blk_SF    = typename Sm1xxBlkScaledConfig::Blk_SF; 
 -  using Blk_Elems = decltype(Blk_MN{} * Blk_SF{});
 +  using Blk_SF    = typename Sm1xxBlkScaledConfig::Blk_SF;
 +
@@ -25,7 +25,7 @@
 +  // Determine if we need to fold EffBlk_SF into the basic block to keep TMA layouts flat.
 +  // This is needed when EffBlk_SF > MMA_NSF (i.e. the outer K shape would be non-trivial).
 +  static constexpr bool FoldSFIntoBasicBlock = (NumSFAlongK < Blk_SF{}) && (int(EffBlk_SF{}) > MMA_NSF);
-
+ 
    // Basic storage block for new Scaling Factor Layouts
    using mnBasicBlockShape  =  Shape<_32,_4>;
    using mnBasicBlockStride = Stride<_16,_4>;
@@ -36,7 +36,7 @@
 +      Shape<Int<SFVectorSize>, EffBlk_SF>,
 +      Shape<Int<SFVectorSize>, Int<MMA_NSF>>>;
    using kBasicBlockStride = Stride<_0, _1>;
--
+-  
 +
 +  // Outer K shape: when folded, both dimensions are 1 (trivial); when not folded, original formula
 +  using OuterK0 = cute::conditional_t<FoldSFIntoBasicBlock, _1, decltype(EffBlk_SF{}/Int<MMA_NSF>{})>;
@@ -49,7 +49,7 @@
 +  using sSF_strideMN      = decltype(prepend(                      EffBlk_Elems{},  mnBasicBlockStride{}));
    using sSFA_strideM      = sSF_strideMN;
 -  using sSF_shapeK        = decltype(prepend(make_shape( Blk_SF{}/Int<MMA_NSF>{},   size<2>(TileShape_MNK{}) / Int<SFVectorSize>{} / Blk_SF{}),  kBasicBlockShape{}));
--
+-  
 -  using sSFA_strideK      = decltype(prepend(make_stride(         Int<MMA_NSF>{},   size<0>(TileShape_MNK{}) / Blk_MN{} * Blk_Elems{}), kBasicBlockStride{}));
 +  using sSF_shapeK        = decltype(prepend(make_shape( OuterK0{},   OuterK1{}),  kBasicBlockShape{}));
 +
@@ -57,7 +57,7 @@
    using sSFA_shape        = decltype(make_shape(  sSFA_shapeM{},   sSF_shapeK{}));
    using sSFA_stride       = decltype(make_stride(sSFA_strideM{}, sSFA_strideK{}));
    using SmemLayoutAtomSFA = decltype(make_layout(  sSFA_shape{},  sSFA_stride{}));
-
+ 
    using sSFB_shapeN       = decltype(prepend(size<1>(TileShape_MNK{}) / Blk_MN{},   mnBasicBlockShape{}));
    using sSFB_strideN      = sSF_strideMN;
 -  using sSFB_strideK      = decltype(prepend(make_stride(Int<MMA_NSF>{},   size<1>(TileShape_MNK{}) / Blk_MN{} * Blk_Elems{}), kBasicBlockStride{}));
