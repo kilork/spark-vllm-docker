@@ -1,8 +1,8 @@
 # Recipe: Nemotron-3-Super-NVFP4
-# Optimized for Marlin backend throughput
+# Uses VLLM_CUTLASS for NVFP4
 recipe_version: "1"
-name: Nemotron-3-Super-NVFP4-Marlin-Optimized
-description: vLLM serving Nemotron-3-Super-120B using Marlin kernels
+name: Nemotron-3-Super-NVFP4-CUTLASS-Optimized
+description: vLLM serving Nemotron-3-Super-120B using CUTLASS kernels
 
 model: nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4
 container: vllm-node
@@ -20,15 +20,11 @@ defaults:
   gpu_memory_utilization: 0.7
   max_model_len: 262144
   max_num_seqs: 10
-env:
-  VLLM_NVFP4_GEMM_BACKEND: "marlin"
-  VLLM_TEST_FORCE_FP8_MARLIN: "1"
-  VLLM_MARLIN_USE_ATOMIC_ADD: "1"
 
 command: |
   vllm serve nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4 \
   --kv-cache-dtype fp8 \
-  -tp {tensor_parallel} \
+  --moe-backend cutlass \
   --trust-remote-code \
   --gpu-memory-utilization {gpu_memory_utilization} \
   --max-model-len {max_model_len} \

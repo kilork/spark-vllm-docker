@@ -16,6 +16,7 @@ fi
 ETH_IF=""
 IB_IF=""
 NCCL_DEBUG_VAL=""
+MASTER_PORT="29501"
 
 # Initialize variables
 NODES_ARG=""
@@ -57,6 +58,7 @@ usage() {
     echo "  --launch-script Path to bash script to execute in the container (from examples/ directory or absolute path). If launch script is specified, action should be omitted."
     echo "  --check-config  Check configuration and auto-detection without launching"
     echo "  --solo          Solo mode: skip autodetection, launch only on current node, do not launch Ray cluster"
+    echo "  --master-port   Port for cluster coordination: Ray head port or PyTorch distributed master port (default: 29501)"
     echo "  --no-ray        No-Ray mode: run multi-node vLLM without Ray (uses PyTorch distributed backend)"
     echo "  --no-cache-dirs Do not mount default cache directories (~/.cache/vllm, ~/.cache/flashinfer, ~/.triton)"
     echo "  -d              Daemon mode (only for 'start' action)"
@@ -94,6 +96,7 @@ while [[ "$#" -gt 0 ]]; do
                 NCCL_DEBUG_VAL="INFO"
             fi
             ;;
+        --master-port|--head-port) MASTER_PORT="$2"; shift ;;
         --check-config) CHECK_CONFIG="true" ;;
         --solo) SOLO_MODE="true" ;;
         --no-ray) NO_RAY_MODE="true" ;;
@@ -554,11 +557,15 @@ apply_mod_to_container() {
 # Prints the path of the temp file (caller must delete it).
 make_node_script() {
     local script_path="$1"; local nnodes="$2"; local node_rank="$3"; local master_addr="$4"
-    local extra="--nnodes $nnodes --node-rank $node_rank --master-addr $master_addr"
+    local extra="--nnodes $nnodes --node-rank $node_rank --master-addr $master_addr --master-port $MASTER_PORT"
     [[ "$node_rank" -gt 0 ]] && extra="$extra --headless"
 
     local tmp; tmp=$(mktemp /tmp/vllm_node_script_XXXXXX.sh)
-    grep -v -- '--distributed-executor-backend' "$script_path" > "$tmp"
+    # Remove just the flag and its value (not the whole line), then filter empty/backslash-only lines
+    sed 's/--distributed-executor-backend[[:space:]]*[^[:space:]]*//' "$script_path" | \
+        grep -Ev '^[[:space:]\\]*$' > "$tmp"
+    # Strip trailing backslash from last line before appending multi-node args
+    sed -i "$ s/[[:space:]]*\\\\[[:space:]]*$//" "$tmp"
     sed -i "$ s/$/ $extra/" "$tmp"
     chmod +x "$tmp"
     echo "$tmp"
@@ -609,7 +616,7 @@ start_ray_head() {
     local container="$1"
     echo "Starting Ray HEAD node on $HEAD_IP..."
     docker exec -d "$container" bash -c \
-        "ray start --block --head --port 6379 --object-store-memory 1073741824 --num-cpus 2 \
+        "ray start --block --head --port $MASTER_PORT --object-store-memory 1073741824 --num-cpus 2 \
          --node-ip-address $HEAD_IP --include-dashboard=false --disable-usage-stats \
          >> /proc/1/fd/1 2>&1"
 }
@@ -621,7 +628,7 @@ start_ray_worker() {
     ssh -o BatchMode=yes -o StrictHostKeyChecking=no "$worker_ip" \
         "docker exec -d $container bash -c \
          'ray start --block --object-store-memory 1073741824 --num-cpus 2 --disable-usage-stats \
-          --address=$HEAD_IP:6379 --node-ip-address $worker_ip >> /proc/1/fd/1 2>&1'"
+          --address=$HEAD_IP:$MASTER_PORT --node-ip-address $worker_ip >> /proc/1/fd/1 2>&1'"
 }
 
 # Start Cluster Function
@@ -743,7 +750,7 @@ _exec_on_head() {
         echo "Command dispatched in background (Daemon mode). Container: $CONTAINER_NAME"
     else
         if [ -t 0 ]; then DOCKER_EXEC_FLAGS="-it"; else DOCKER_EXEC_FLAGS="-i"; fi
-        docker exec $DOCKER_EXEC_FLAGS "$CONTAINER_NAME" $cmd
+        docker exec $DOCKER_EXEC_FLAGS "$CONTAINER_NAME" bash -c "$cmd"
     fi
 }
 
@@ -761,7 +768,7 @@ exec_no_ray_cluster() {
         else
             local clean
             clean=$(echo "$base_cmd" | sed 's/--distributed-executor-backend[[:space:]]*[^[:space:]]*//')
-            worker_cmd="$clean --nnodes $total_nodes --node-rank $rank --master-addr $HEAD_IP --headless"
+            worker_cmd="$clean --nnodes $total_nodes --node-rank $rank --master-addr $HEAD_IP --master-port $MASTER_PORT --headless"
         fi
         echo "Launching worker (rank $rank) on $worker..."
         ssh -o BatchMode=yes -o StrictHostKeyChecking=no "$worker" \
@@ -776,7 +783,7 @@ exec_no_ray_cluster() {
     else
         local clean
         clean=$(echo "$base_cmd" | sed 's/--distributed-executor-backend[[:space:]]*[^[:space:]]*//')
-        head_cmd="$clean --nnodes $total_nodes --node-rank 0 --master-addr $HEAD_IP"
+        head_cmd="$clean --nnodes $total_nodes --node-rank 0 --master-addr $HEAD_IP --master-port $MASTER_PORT"
     fi
 
     echo "Executing command on head node (rank 0): $head_cmd"
@@ -785,7 +792,7 @@ exec_no_ray_cluster() {
         echo "Command dispatched in background (Daemon mode). Container: $CONTAINER_NAME"
     else
         if [ -t 0 ]; then DOCKER_EXEC_FLAGS="-it"; else DOCKER_EXEC_FLAGS="-i"; fi
-        docker exec $DOCKER_EXEC_FLAGS "$CONTAINER_NAME" $head_cmd
+        docker exec $DOCKER_EXEC_FLAGS "$CONTAINER_NAME" bash -c "$head_cmd"
     fi
 }
 

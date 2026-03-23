@@ -149,6 +149,27 @@ Don't do it every time you rebuild, because it will slow down compilation times.
 
 For periodic maintenance, I recommend using a filter: `docker builder prune --filter until=72h`
 
+### 2026-03-18
+
+#### `--master-port` / `--head-port` Parameter
+
+Added `--master-port` (synonym: `--head-port`) to both `launch-cluster.sh` and `run-recipe.sh` to configure the port used for cluster coordination:
+
+- In **Ray mode**: sets the Ray head node port (previously hardcoded to 6379)
+- In **No-Ray mode**: sets the PyTorch distributed `--master-port` passed to vLLM
+
+Default is `29501`.
+
+```bash
+./launch-cluster.sh --master-port 29501 --no-ray exec vllm serve ...
+./run-recipe.sh qwen3.5-122b-fp8 --no-ray --master-port 29501
+```
+
+#### `--network` Parameter in Build Arguments
+
+Added `--network <name>` to `build-and-copy.sh` to allow using host networking during builds. 
+Thanks @apairmont for the PR.
+
 ### 2026-03-17
 
 #### EXPERIMENTAL Intel/Qwen3.5-397B-A17B-int4-AutoRound Recipe
@@ -200,7 +221,7 @@ Added `--no-ray` flag to `launch-cluster.sh` to run multi-node vLLM clusters wit
 ```
 
 The following `launch-cluster.sh` flags are now also passed through from `run-recipe.sh`:
-`--name`, `--eth-if`, `--ib-if`, `-j`, `--no-cache-dirs`, `--non-privileged`, `--mem-limit-gb`, `--mem-swap-limit-gb`, `--pids-limit`, `--shm-size-gb`.
+`--master-port`, `--name`, `--eth-if`, `--ib-if`, `-j`, `--no-cache-dirs`, `--non-privileged`, `--mem-limit-gb`, `--mem-swap-limit-gb`, `--pids-limit`, `--shm-size-gb`.
 
 #### Nemotron-3-Nano-NVFP4 Switched to Marlin Backend
 
@@ -976,6 +997,7 @@ You can override the auto-detected values if needed:
 | `--check-config` | Check configuration and auto-detection without launching. |
 | `--solo` | Solo mode: skip autodetection, launch only on current node, do not launch Ray cluster |
 | `--no-ray` | No-Ray mode: run multi-node vLLM without Ray (uses PyTorch distributed backend). |
+| `--master-port` / `--head-port` | Port for cluster coordination: Ray head port or PyTorch distributed master port (default: 29501). |
 | `--no-cache-dirs` | Do not mount default cache directories (~/.cache/vllm, ~/.cache/flashinfer, ~/.triton). |
 | `--launch-script` | Path to bash script to execute in the container (from examples/ directory or absolute path). If launch script is specified, action should be omitted. |
 | `-d` | Run in daemon mode (detached). |

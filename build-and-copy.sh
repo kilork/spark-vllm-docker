@@ -21,6 +21,7 @@ PRE_TRANSFORMERS=false
 FULL_LOG=false
 BUILD_JOBS="16"
 GPU_ARCH_LIST="12.1a"
+NETWORK_ARG=""
 WHEELS_REPO="eugr/spark-vllm-docker"
 FLASHINFER_RELEASE_TAG="prebuilt-flashinfer-current"
 VLLM_RELEASE_TAG="prebuilt-vllm-current"
@@ -244,6 +245,7 @@ usage() {
     echo "  --apply-vllm-pr <pr-num>      : Apply a specific PR patch to vLLM source. Can be specified multiple times."
     echo "  --full-log                    : Enable full build logging (--progress=plain)"
     echo "  --no-build                    : Skip building, only copy image (requires --copy-to)"
+    echo "  --network <network>           : Docker network to use during build"
     echo "  -h, --help                    : Show this help message"
     exit 1
 }
@@ -305,6 +307,15 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --full-log) FULL_LOG=true ;;
         --no-build) NO_BUILD=true ;;
+        --network)
+            if [ -n "$2" ] && [[ "$2" != -* ]]; then
+                NETWORK_ARG="$2"
+                shift
+            else
+                echo "Error: --network requires a network name."
+                exit 1
+            fi
+            ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter passed: $1"; usage ;;
     esac
@@ -340,6 +351,9 @@ fi
 COMMON_BUILD_FLAGS+=("--build-arg" "BUILD_JOBS=$BUILD_JOBS")
 COMMON_BUILD_FLAGS+=("--build-arg" "TORCH_CUDA_ARCH_LIST=$GPU_ARCH_LIST")
 COMMON_BUILD_FLAGS+=("--build-arg" "FLASHINFER_CUDA_ARCH_LIST=$GPU_ARCH_LIST")
+if [ -n "$NETWORK_ARG" ]; then
+    COMMON_BUILD_FLAGS+=("--network" "$NETWORK_ARG")
+fi
 
 # =====================================================
 # Build image (unless --no-build or --exp-mxfp4)
